@@ -1,15 +1,15 @@
 from dataclasses import dataclass
 from pathlib import Path
 
-MODEL_DIR = "./model"
-IMAGES_DIR = "./data/images"
+DEFAULT_MODEL_DIR = "./model"
+DEFAULT_IMAGES_DIR = "./data/images"
 USE_WANDB = True
 WANDB_ENTITY = "eigenben-rubidiom"
 WANDB_PROJECT = "penguinoh-generator"
 
 @dataclass
 class SharedConfig:
-    instance_name: str = "penguinoh"
+    instance_name: str = "pngnh"
     class_name: str = "Stuffed Penguin"
     model_name: str = "black-forest-labs/FLUX.1-dev"
 
@@ -28,20 +28,20 @@ class TrainConfig(SharedConfig):
     checkpointing_steps: int = 1000
     seed: int = 117
 
-def download_models(config):
+def download(model_dir, config):
     import torch
     from diffusers import DiffusionPipeline
     from huggingface_hub import snapshot_download
 
     snapshot_download(
         config.model_name,
-        local_dir=MODEL_DIR,
+        local_dir=model_dir,
         ignore_patterns=["*.pt", "*.bin"],  # using safetensors
     )
 
-    DiffusionPipeline.from_pretrained(MODEL_DIR, torch_dtype=torch.bfloat16)
+    DiffusionPipeline.from_pretrained(model_dir, torch_dtype=torch.bfloat16)
 
-def train(config):
+def train(model_dir, images_dir, config):
     import torch
     import subprocess
     from accelerate.utils import write_basic_config
@@ -74,9 +74,9 @@ def train(config):
             "launch",
             "dreambooth/train_dreambooth_lora_flux.py",
             ("--mixed_precision=bf16" if torch.cuda.is_available() else "--mixed_precision=no"),  # half-precision floats most of the time for faster training
-            f"--pretrained_model_name_or_path={MODEL_DIR}",
-            f"--instance_data_dir={IMAGES_DIR}",
-            f"--output_dir={MODEL_DIR}",
+            f"--pretrained_model_name_or_path={model_dir}",
+            f"--instance_data_dir={images_dir}",
+            f"--output_dir={model_dir}",
             f"--instance_prompt={prompt}",
             f"--resolution={config.resolution}",
             f"--train_batch_size={config.train_batch_size}",
@@ -120,6 +120,6 @@ if __name__ == "__main__":
     train_config = TrainConfig()
 
     if args.action in (None, "download"):
-        download_models(train_config)
+        download(DEFAULT_MODEL_DIR, train_config)
     if args.action in (None, "train"):
-        train(train_config)
+        train(DEFAULT_MODEL_DIR, DEFAULT_IMAGES_DIR, train_config)
