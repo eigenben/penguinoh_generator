@@ -1,0 +1,7 @@
+[project]
+name = "penguinoh-generator"
+version = "0.1.0"
+description = "Generate photos of Penguinoh with Flux.1-dev"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = []
