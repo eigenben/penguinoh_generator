@@ -7,6 +7,7 @@ model/
 wandb/
 wheels/
 *.egg-info
+.uvcache/
 
 # Virtual environments
 .venv
