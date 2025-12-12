@@ -4,4 +4,20 @@ version = "0.1.0"
 description = "Generate photos of Penguinoh with Flux.1-dev"
 readme = "README.md"
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "datasets~=2.13.0",
+    "fastapi[standard]==0.115.4",
+    "ftfy~=6.1.0",
+    "gradio~=5.5.0",
+    "huggingface-hub==0.36.0",
+    "numpy<2",
+    "peft==0.11.1",
+    "pydantic==2.9.2",
+    "sentencepiece>=0.1.91,!=0.1.92",
+    "smart-open~=6.4.0",
+    "starlette==0.41.2",
+    "torch~=2.2.0",
+    "torchvision~=0.16",
+    "transformers~=4.41.2",
+    "wandb==0.17.6",
+]
