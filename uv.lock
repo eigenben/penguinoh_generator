@@ -342,8 +342,8 @@ wheels = [
 
 [[package]]
 name = "diffusers"
-version = "0.36.0"
-source = { registry = "https://pypi.org/simple" }
+version = "0.36.0.dev0"
+source = { git = "https://github.com/huggingface/diffusers.git#1567243463aca4f8bff03dafa9c12ab68c741673" }
 dependencies = [
     { name = "filelock" },
     { name = "httpx" },
@@ -354,10 +354,6 @@ dependencies = [
     { name = "regex" },
     { name = "requests" },
     { name = "safetensors" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/88/45/ccb2e2180ddf475a0f931dac6a50346310e4c464ce3cccb8a65d1fc1e16d/diffusers-0.36.0.tar.gz", hash = "sha256:a9cde8721b415bde6a678f2d02abb85396487e1b0e0d2b4abb462d14a9825ab0", size = 3795088, upload-time = "2025-12-08T10:14:34.255Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/35/50/281f92cb1f83854dbd79b6e958b3bc5018607e2542971d41604ba7a14b2f/diffusers-0.36.0-py3-none-any.whl", hash = "sha256:525d42abc74bfc3b2db594999961295c054b48ef40a11724dacf50e6abd1af98", size = 4597884, upload-time = "2025-12-08T10:14:31.979Z" },
 ]
 
 [[package]]
@@ -1372,7 +1368,7 @@ dependencies = [
 requires-dist = [
     { name = "accelerate", specifier = ">=0.34.0" },
     { name = "datasets", specifier = "~=2.13.0" },
-    { name = "diffusers", specifier = ">=0.36.0" },
+    { name = "diffusers", git = "https://github.com/huggingface/diffusers.git" },
     { name = "fastapi", extras = ["standard"], specifier = "==0.115.4" },
     { name = "ftfy", specifier = "~=6.1.0" },
     { name = "gradio", specifier = "~=5.5.0" },
