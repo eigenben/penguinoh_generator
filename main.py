@@ -42,10 +42,14 @@ def download_models(config):
     DiffusionPipeline.from_pretrained(MODEL_DIR, torch_dtype=torch.bfloat16)
 
 def train(config):
+    import torch
     import subprocess
     from accelerate.utils import write_basic_config
 
-    write_basic_config(mixed_precision="bf16")  # set up hugging face accelerate library for fast training
+    if torch.cuda.is_available():
+        write_basic_config(mixed_precision="bf16")  # set up hugging face accelerate library for fast training
+    else:
+        write_basic_config(mixed_precision="no")
 
     instance_phrase = f"{config.instance_name} the {config.class_name}"
     prompt = f"{config.prefix} {instance_phrase} {config.postfix}".strip()
@@ -66,10 +70,10 @@ def train(config):
     print("Launching dreambooth training script...")
     _exec_subprocess(
         [
-            "uv run accelerate",
+            "accelerate",
             "launch",
             "dreambooth/train_dreambooth_lora_flux.py",
-            "--mixed_precision=bf16",  # half-precision floats most of the time for faster training
+            ("--mixed_precision=bf16" if torch.cuda.is_available() else "--mixed_precision=no"),  # half-precision floats most of the time for faster training
             f"--pretrained_model_name_or_path={MODEL_DIR}",
             f"--instance_data_dir={IMAGES_DIR}",
             f"--output_dir={MODEL_DIR}",
@@ -97,13 +101,25 @@ def train(config):
     )
 
 if __name__ == "__main__":
+    import argparse
     import os
-
-    train_config = TrainConfig()
 
     if USE_WANDB:
         os.environ["WANDB_ENTITY"] = WANDB_ENTITY
         os.environ["WANDB_PROJECT"] = WANDB_PROJECT
 
-    download_models(train_config)
-    train(train_config)
+    parser = argparse.ArgumentParser(description="Download model assets and/or run training.")
+    parser.add_argument(
+        "action",
+        nargs="?",
+        choices=["download", "train"],
+        help='Choose "download" to only fetch model assets or "train" to only run training. Omit to do both.',
+    )
+    args = parser.parse_args()
+
+    train_config = TrainConfig()
+
+    if args.action in (None, "download"):
+        download_models(train_config)
+    if args.action in (None, "train"):
+        train(train_config)
