@@ -1,0 +1,72 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+  cat <<'EOF'
+Usage: ./bin/rsync <host[:port]> [remote_path]
+
+Rsync the repository contents to <host>:<remote_path> over SSH.
+
+Examples:
+  ./bin/rsync 8.8.8.8
+  ./bin/rsync 8.8.8.8 /workspace
+  ./bin/rsync 8.8.8.8:2222
+  ./bin/rsync 8.8.8.8:2222 /workspace/project
+  ./bin/rsync '[2001:db8::1]:2222'
+EOF
+}
+
+if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
+  usage
+  exit 0
+fi
+
+if (( $# < 1 || $# > 2 )); then
+  usage >&2
+  exit 2
+fi
+
+TARGET="$1"
+REMOTE_PATH="${2:-/workspace}"
+
+# Explicitly set so it's easy to swap later.
+SSH_PORT=22
+
+# Parse <host[:port]>. For IPv6 with a port, use bracket form: [addr]:port
+# (e.g. "[2001:db8::1]:22"). Plain IPv6 without brackets is treated as host-only.
+HOST="$TARGET"
+if [[ "$TARGET" =~ ^\\[(.+)\\](:([0-9]+))?$ ]]; then
+  HOST="${BASH_REMATCH[1]}"
+  if [[ -n "${BASH_REMATCH[3]:-}" ]]; then
+    SSH_PORT="${BASH_REMATCH[3]}"
+  fi
+elif [[ "$TARGET" == *:* ]]; then
+  # Split only if it looks like host:port (single ':').
+  if [[ "$(awk -F: '{print NF-1}' <<<"$TARGET")" -eq 1 ]]; then
+    HOST="${TARGET%%:*}"
+    SSH_PORT="${TARGET##*:}"
+  fi
+fi
+
+if ! [[ "$SSH_PORT" =~ ^[0-9]+$ ]] || (( SSH_PORT < 1 || SSH_PORT > 65535 )); then
+  echo "Invalid port: $SSH_PORT" >&2
+  exit 2
+fi
+
+ROOT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
+
+RSYNC_PROGRESS=()
+if rsync --version 2>/dev/null | head -n1 | grep -Eq 'version 3\\.'; then
+  RSYNC_PROGRESS+=(--info=progress2)
+else
+  # macOS ships rsync 2.6.9, which doesn't support --info=progress2.
+  RSYNC_PROGRESS+=(--progress)
+fi
+
+rsync -az --partial "${RSYNC_PROGRESS[@]}" \
+  --no-o --no-g \
+  --exclude '.git/' \
+  --exclude-from "${ROOT_DIR}/.gitignore" \
+  -e "ssh -p ${SSH_PORT}" \
+  "${ROOT_DIR}/" \
+  "${HOST}:${REMOTE_PATH%/}/"

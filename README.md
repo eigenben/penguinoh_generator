@@ -107,6 +107,18 @@ uv run modal deploy modal_app.py
 
 This will create a public URL for the Gradio interface where you can generate images.
 
+## Run on a remote GPU host
+- Ensure rsync is installed: `apt update && apt install rsync -y`
+- Install uv: `curl -LsSf https://astral.sh/uv/install.sh | sh`
+- Sync project to remote host: `bin/rspec 1.1.1.1:22 /workspace` (`/workspace` is implied/default)
+- Ensure HF_TOKEN and other env vars are set in `.env` on remote host
+- SSH into remote host and run: `cd /workspace && uv sync && uv run --env-file .env python main.py`
+
+## Docker (GPU)
+- Build: `docker build -t penguinoh-generator:latest .`
+- Ensure HF_TOKEN and other env vars are set in `.env` on remote host
+- Run (NVIDIA): `docker run --rm --gpus all --env-file .env -v "$PWD/model:/app/model" penguinoh-generator:latest`
+
 ## Configuration
 
 Training parameters can be configured in `main.py`:
