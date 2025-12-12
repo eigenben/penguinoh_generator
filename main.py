@@ -1,8 +1,8 @@
 from dataclasses import dataclass
 from pathlib import Path
 
-MODEL_DIR = "/model"
-IMAGES_DIR = "/data/images"
+MODEL_DIR = "./model"
+IMAGES_DIR = "./data/images"
 USE_WANDB = True
 WANDB_ENTITY = "eigenben-rubidiom"
 WANDB_PROJECT = "penguinoh-generator"
@@ -15,16 +15,8 @@ class SharedConfig:
 
 @dataclass
 class TrainConfig(SharedConfig):
-    # training prompt looks like `{PREFIX} {INSTANCE_NAME} the {CLASS_NAME} {POSTFIX}`
     prefix: str = "a photo of"
     postfix: str = ""
-
-    # locator for plaintext file with urls for images of target instance
-    instance_example_urls_file: str = str(
-        Path(__file__).parent / "instance_example_urls.txt"
-    )
-
-    # Hyperparameters/constants from the huggingface training example
     resolution: int = 512
     train_batch_size: int = 3
     rank: int = 16  # lora rank
@@ -114,9 +106,4 @@ if __name__ == "__main__":
         os.environ["WANDB_PROJECT"] = WANDB_PROJECT
 
     download_models(train_config)
-
-    # read instance example urls from file
-    with open(train_config.instance_example_urls_file, "r") as f:
-        instance_example_urls = [line.strip() for line in f.readlines() if line.strip()]
-
-    train(instance_example_urls, train_config)
+    train(train_config)
