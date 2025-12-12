@@ -62,7 +62,7 @@ uv sync
 
 ### Local Training
 
-0. Ensure uv dependencies are installed:
+0. **Ensure uv dependencies are installed:**
 ```
 uv sync
 ```
