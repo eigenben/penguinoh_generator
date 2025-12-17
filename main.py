@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from pathlib import Path
 
-DEFAULT_MODEL_DIR = "./model"
+DEFAULT_MODEL_DIR = "FLUX.1-dev-penguinoh-generator"
 DEFAULT_IMAGES_DIR = "./data/images"
 USE_WANDB = True
 WANDB_ENTITY = "eigenben-rubidiom"
@@ -18,7 +18,7 @@ class TrainConfig(SharedConfig):
     prefix: str = "a photo of"
     postfix: str = ""
     resolution: int = 512
-    train_batch_size: int = 3
+    train_batch_size: int = 1
     rank: int = 16  # lora rank
     gradient_accumulation_steps: int = 1
     learning_rate: float = 4e-4
@@ -87,6 +87,7 @@ def train(model_dir, images_dir, config):
             f"--max_train_steps={config.max_train_steps}",
             f"--checkpointing_steps={config.checkpointing_steps}",
             f"--seed={config.seed}",  # increased reproducibility by seeding the RNG
+            f"--push_to_hub",
         ]
         + (
             [
