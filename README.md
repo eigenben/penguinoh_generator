@@ -12,6 +12,7 @@ The project supports both local training and cloud deployment via [Modal](https:
 
 - **DreamBooth Fine-tuning**: Train a LoRA adapter on custom images using Hugging Face's DreamBooth implementation
 - **FLUX.1-dev Model**: Uses Black Forest Labs' state-of-the-art diffusion model as the base
+- **Local Inference**: Generate images locally using pre-trained models from Hugging Face Hub
 - **Cloud Deployment**: Deploy training and inference on Modal with A100 GPUs
 - **Web Interface**: Interactive Gradio-based UI for generating images
 - **Training Monitoring**: Integration with Weights & Biases for experiment tracking
@@ -22,12 +23,14 @@ The project supports both local training and cloud deployment via [Modal](https:
 ```
 .
 ├── main.py              # Local training script (download & train)
+├── inference.py         # Local inference script using pre-trained model
 ├── modal_app.py         # Modal deployment (cloud training & inference)
 ├── pyproject.toml       # Project dependencies
 ├── data/
 │   └── images/          # Training images of the subject
 ├── dreambooth/          # Hugging Face DreamBooth training scripts
-└── model/               # Output directory for trained models
+├── model/               # Output directory for trained models
+└── output/              # Generated images from inference
 ```
 
 ## Requirements
@@ -81,6 +84,28 @@ uv run main.py train
 ```bash
 uv run main.py
 ```
+
+### Local Inference
+
+Run inference using the pre-trained model from Hugging Face Hub:
+
+1. **Ensure the output directory exists**:
+```bash
+mkdir -p output
+```
+
+2. **Run the inference script**:
+```bash
+uv run inference.py
+```
+
+This will:
+- Load the FLUX.1-dev base model with bfloat16 precision
+- Load the fine-tuned LoRA weights from `eigenben/FLUX.1-dev-penguinoh-generator`
+- Generate 10 example images with various prompts (Paris, San Francisco, pastel drawing, etc.)
+- Save timestamped images to the `output/` directory
+
+You can modify `inference.py` to customize the prompts and generate your own images.
 
 ### Cloud Training with Modal
 
