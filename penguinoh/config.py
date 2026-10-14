@@ -30,7 +30,7 @@ class TrainConfig:
     gradient_accumulation_steps: int = 1
     rank: int = 32  # lora_alpha is set to match, so the effective scale is 1.0
     learning_rate: float = 1e-4
-    lr_scheduler: str = "constant"
+    lr_scheduler: str = "constant_with_warmup"
     lr_warmup_steps: int = 100
     max_train_steps: int = 2000  # ~38 epochs over 52 images
     checkpointing_steps: int = 250
