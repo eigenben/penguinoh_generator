@@ -1,0 +1,17 @@
+# Fixed prompts for comparing checkpoints. Lines without "pngnh the Stuffed Penguin"
+# are expanded to "a photo of pngnh the Stuffed Penguin <line>".
+
+# Identity check: plain background, nothing to hide behind
+a studio portrait photo of pngnh the Stuffed Penguin, soft lighting, plain gray background
+# Familiar travel-photo territory
+sitting on a park bench in Central Park in autumn, full body
+in front of the Golden Gate Bridge on a foggy morning, upper body
+# Poses and angles the dataset has few of
+seen from the side, walking across Shibuya crossing in Tokyo at night with neon signs
+lying on a beach towel next to a coconut drink on a white sand beach in the Maldives
+wearing a tiny astronaut helmet, floating inside the International Space Station
+# Styles: does the identity survive when the medium changes?
+a watercolor painting of pngnh the Stuffed Penguin riding in a gondola in Venice
+a claymation still of pngnh the Stuffed Penguin baking bread in a cozy kitchen
+a vintage 1960s travel poster of pngnh the Stuffed Penguin in front of the Eiffel Tower, bold flat colors, the text "PARIS"
+a children's book illustration of pngnh the Stuffed Penguin standing on an iceberg next to emperor penguins

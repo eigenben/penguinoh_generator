@@ -3,11 +3,17 @@ __pycache__/
 *.py[oc]
 build/
 dist/
-model/
-wandb/
 wheels/
 *.egg-info
 .uvcache/
+.ruff_cache/
 
 # Virtual environments
 .venv
+
+# Training runs, generated images, and local model downloads
+runs/
+output/
+model/
+wandb/
+.DS_Store

@@ -1,6 +1,7 @@
 .git
 .gitignore
 .venv
+.uvcache
 .ruff_cache
 .cache
 __pycache__
@@ -8,4 +9,7 @@ __pycache__
 *.pyo
 *.pyd
 .DS_Store
-
+model/
+runs/
+output/
+wandb/
