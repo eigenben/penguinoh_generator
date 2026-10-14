@@ -7,14 +7,9 @@ ENV DEBIAN_FRONTEND=noninteractive
 # Python 3.12 is the default on Ubuntu 24.04.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
-    git \
     python3 \
     python3-venv \
     python-is-python3 \
-    libglib2.0-0 \
-    libgl1 \
-    libjpeg-turbo8 \
-    libpng16-16 \
   && rm -rf /var/lib/apt/lists/*
 
 # Install uv (no curl/bootstrap needed).
@@ -30,10 +25,11 @@ ENV PATH=/opt/venv/bin:$PATH
 # Avoid matplotlib trying to use an interactive backend in containers.
 ENV MPLBACKEND=Agg
 
-# Sync dependencies from lockfile for reproducible, offline-ish runtime.
+# Install dependencies from the lockfile first so source changes don't invalidate this layer.
 COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-dev --no-install-project
 
 COPY . .
+RUN uv sync --frozen --no-dev
 
-CMD ["uv", "run", "--no-sync", "python", "main.py"]
+CMD ["penguinoh", "train"]

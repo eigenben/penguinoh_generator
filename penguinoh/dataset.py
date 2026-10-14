@@ -2,19 +2,17 @@
 
 data/train/metadata.jsonl is the manifest: one {"file_name", "text"} entry per
 training image. To add a photo, add a line naming the website file (any
-extension) with its caption, then re-run this script.
+extension) with its caption, then run `penguinoh prepare`.
 """
 
-import argparse
 import json
 from pathlib import Path
 
 from PIL import Image, ImageOps
 
-from main import SharedConfig
+from penguinoh.config import REPO_ROOT, TRIGGER
 
-DEFAULT_SOURCE_DIR = "../penguinoh_website/src/assets/images"
-DEFAULT_TRAIN_DIR = "./data/train"
+DEFAULT_SOURCE_DIR = REPO_ROOT.parent / "penguinoh_website" / "src" / "assets" / "images"
 MAX_SIZE = 1600  # longest side; training buckets downsample from here
 SOURCE_EXTENSIONS = (".jpeg", ".jpg", ".JPG", ".JPEG")
 
@@ -39,43 +37,28 @@ def process(source: Path, dest: Path):
         im.save(dest, "JPEG", quality=95)  # no exif= argument, so metadata is stripped
 
 
-def main():
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--source", default=DEFAULT_SOURCE_DIR, help="Website image directory")
-    parser.add_argument("--train-dir", default=DEFAULT_TRAIN_DIR, help="Training set directory")
-    parser.add_argument("--force", action="store_true", help="Re-process images that already exist")
-    parser.add_argument("--prune", action="store_true", help="Delete images not listed in the manifest")
-    args = parser.parse_args()
-
-    source_dir, train_dir = Path(args.source), Path(args.train_dir)
-    config = SharedConfig()
-    trigger = f"{config.instance_name} the {config.class_name}"
-
+def prepare(source_dir: Path, train_dir: Path, force: bool = False, prune: bool = False):
     manifest = load_manifest(train_dir)
     names = [entry["file_name"] for entry in manifest]
     if len(names) != len(set(names)):
         raise ValueError("Duplicate file_name entries in metadata.jsonl")
     for entry in manifest:
-        if trigger not in entry["text"]:
-            raise ValueError(f'{entry["file_name"]}: caption must contain "{trigger}"')
+        if TRIGGER not in entry["text"]:
+            raise ValueError(f'{entry["file_name"]}: caption must contain "{TRIGGER}"')
 
     written = 0
     for entry in manifest:
         dest = train_dir / entry["file_name"]
-        if dest.exists() and not args.force:
+        if dest.exists() and not force:
             continue
         process(find_source(source_dir, entry["file_name"]), dest)
         written += 1
 
     stale = sorted(p for p in train_dir.glob("*.jpg") if p.name not in set(names))
     for p in stale:
-        if args.prune:
+        if prune:
             p.unlink()
         else:
             print(f"warning: {p.name} is not in metadata.jsonl (use --prune to delete)")
 
-    print(f"{len(manifest)} images in manifest, {written} written, {len(stale)} {'pruned' if args.prune else 'stale'}")
-
-
-if __name__ == "__main__":
-    main()
+    print(f"{len(manifest)} images in manifest, {written} written, {len(stale)} {'pruned' if prune else 'stale'}")

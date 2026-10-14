@@ -1,138 +1,139 @@
-from dataclasses import dataclass
-import modal
-from main import SharedConfig, TrainConfig, download, train
+"""Train and run the Penguinoh LoRA on Modal GPUs.
 
-MODEL_DIR = "/workspace/model"
-IMAGES_DIR = "/workspace/data/images"
+    modal run --detach modal_app.py::train                  # train (and optionally --push) into the runs volume
+    modal run modal_app.py::generate --run <run-name>       # compare every checkpoint of a run on prompts/eval.txt
+    modal run modal_app.py::generate --prompt "surfing in Hawaii" --seeds 1,2,3
+    modal deploy modal_app.py                               # deploy Generator for modal_web.py (and later penguinoh.com)
+"""
+
+import io
+from pathlib import Path
+
+import modal
+
+from penguinoh.config import HUB_REPO, LORA_WEIGHT_NAME, OUTPUT_DIR, SAMPLERS, TrainConfig
+
+REMOTE_ROOT = Path("/root")  # where Modal puts local Python source, so penguinoh.config.REPO_ROOT resolves here
+HF_CACHE = "/cache/huggingface"
+GPU = "L40S"
 
 app = modal.App(name="penguinoh-generator")
-image = modal.Image.debian_slim(python_version="3.12").apt_install("git").uv_sync()
-model_volume = modal.Volume.from_name("penguinoh-generator-model-volume", create_if_missing=True)
-images_volume = modal.Volume.from_name("penguinoh-generator-images-volume", create_if_missing=True)
 
-image = image.env(
-    {"HF_XET_HIGH_PERFORMANCE": "1"}  # turn on faster downloads from HF
+image = (
+    modal.Image.debian_slim(python_version="3.12")
+    .uv_sync()
+    .env({"HF_HOME": HF_CACHE, "HF_XET_HIGH_PERFORMANCE": "1"})
+    .add_local_dir("dreambooth", str(REMOTE_ROOT / "dreambooth"))
+    .add_local_dir("data/train", str(REMOTE_ROOT / "data" / "train"))
+    .add_local_python_source("penguinoh")
 )
 
-image = image.add_local_file("./main.py", "/root/main.py")
-image = image.add_local_dir("./dreambooth", "/root/dreambooth")
+hf_cache = modal.Volume.from_name("penguinoh-generator-hf-cache", create_if_missing=True)
+runs_volume = modal.Volume.from_name("penguinoh-generator-runs", create_if_missing=True)
+volumes = {HF_CACHE: hf_cache, str(REMOTE_ROOT / "runs"): runs_volume}
 
-huggingface_secret = modal.Secret.from_name(
-    "huggingface-secret", required_keys=["HF_TOKEN"]
-)
-
-wandb_secret = modal.Secret.from_name(
-    "wandb-secret", required_keys=["WANDB_API_KEY"]
-)
-
-@app.function(
-    volumes={MODEL_DIR: model_volume, IMAGES_DIR: images_volume},
-    image=image,
-    secrets=[huggingface_secret, wandb_secret],
-    timeout=600,  # 10 minutes
-)
-def run_download(model_dir, config):
-    download(model_dir, config)
-
-@app.function(
-    volumes={MODEL_DIR: model_volume, IMAGES_DIR: images_volume},
-    gpu="A100-80GB",
-    image=image,
-    secrets=[huggingface_secret, wandb_secret],
-    timeout=600,  # 10 minutes
-)
-def run_train(model_dir, images_dir, config):
-    train(model_dir, images_dir, config)
-    model_volume.commit()
+huggingface_secret = modal.Secret.from_name("huggingface-secret", required_keys=["HF_TOKEN"])
+wandb_secret = modal.Secret.from_name("wandb-secret", required_keys=["WANDB_API_KEY"])
 
 
-@app.cls(image=image, gpu="A100", volumes={MODEL_DIR: model_volume})
-class Model:
+@app.function(image=image, gpu=GPU, volumes=volumes, secrets=[huggingface_secret, wandb_secret], timeout=4 * 60 * 60)
+def train_remote(run_name: str, config: TrainConfig, push: bool):
+    from penguinoh.config import RUNS_DIR
+    from penguinoh.train import train, upload
+
+    output_dir = RUNS_DIR / run_name
+    try:
+        train(config, output_dir)
+    finally:
+        runs_volume.commit()  # keep whatever checkpoints exist even if training fails
+    if push:
+        upload(output_dir)
+
+
+@app.cls(image=image, gpu=GPU, volumes=volumes, secrets=[huggingface_secret], scaledown_window=300, timeout=60 * 60,
+         max_containers=4)
+class Generator:
+    sampler: str = modal.parameter(default="base")
+
     @modal.enter()
-    def load_model(self):
-        import torch
-        from diffusers import DiffusionPipeline
+    def load(self):
+        from penguinoh.generate import load_pipeline
 
-        # Reload the modal.Volume to ensure the latest state is accessible.
-        model_volume.reload()
-
-        # set up a hugging face inference pipeline using our model
-        pipe = DiffusionPipeline.from_pretrained(
-            MODEL_DIR,
-            torch_dtype=torch.bfloat16,
-        ).to("cuda")
-        pipe.load_lora_weights(MODEL_DIR)
-        self.pipe = pipe
+        self.pipe = load_pipeline(self.sampler)
 
     @modal.method()
-    def inference(self, text, config):
-        image = self.pipe(
-            text,
-            num_inference_steps=config.num_inference_steps,
-            guidance_scale=config.guidance_scale,
-        ).images[0]
+    def generate(self, lora: str, prompts: list[str], seeds: list[int], lora_scale: float = 1.0) -> list[bytes]:
+        """Render every (prompt, seed) pair with one LoRA; returns PNG bytes in prompt-major order."""
+        from penguinoh.generate import generate, parse_lora, set_lora
 
-        return image
+        runs_volume.reload()
+        set_lora(self.pipe, parse_lora(lora), lora_scale)
+        images = []
+        for prompt in prompts:
+            for seed in seeds:
+                buffer = io.BytesIO()
+                generate(self.pipe, prompt, seed, self.sampler).save(buffer, format="PNG")
+                images.append(buffer.getvalue())
+        return images
 
-@dataclass
-class AppConfig(SharedConfig):
-    num_inference_steps: int = 50
-    guidance_scale: float = 6
 
+def run_loras(run_name: str) -> list[str]:
+    """Every checkpoint of a run in the runs volume, in step order, then the final weights."""
+    entries = {Path(entry.path).name for entry in runs_volume.listdir(run_name)}
+    if not entries:
+        raise ValueError(f"No run named {run_name} in the runs volume")
+    checkpoints = sorted((e for e in entries if e.startswith("checkpoint-")), key=lambda e: int(e.split("-")[1]))
+    final = [f"runs/{run_name}"] if LORA_WEIGHT_NAME in entries else []
+    return [f"runs/{run_name}/{c}" for c in checkpoints] + final
 
-@app.function(
-    image=image,
-    max_containers=1,
-)
-@modal.concurrent(max_inputs=100)
-@modal.asgi_app()
-def fastapi_app():
-    import gradio as gr
-    from fastapi import FastAPI
-    from fastapi.responses import FileResponse
-    from gradio.routes import mount_gradio_app
-
-    web_app = FastAPI()
-
-    # Call out to the inference in a separate Modal environment with a GPU
-    def go(text=""):
-        if not text:
-            text = example_prompts[0]
-        return Model().inference.remote(text, config)
-
-    config = AppConfig()
-    instance_phrase = f"{config.instance_name} the {config.class_name}"
-    description = f"Describe what they are doing or how a particular artist or style would depict them. Be fantastical!"
-    theme = gr.themes.Default(primary_hue="green", secondary_hue="emerald", neutral_hue="neutral")
-
-    with gr.Blocks(theme=theme, title=f"Generate images of Penguinoh") as interface:
-        gr.Markdown(f"# Generate images of {instance_phrase}.\n\n{description}")
-        with gr.Row():
-            inp = gr.Textbox(
-                label="",
-                placeholder=f"Describe the version of {instance_phrase} you'd like to see",
-                lines=10,
-            )
-            out = gr.Image(height=512, width=512, label="", min_width=512, elem_id="output")
-        with gr.Row():
-            btn = gr.Button("Generate", variant="primary", scale=2)
-            btn.click(fn=go, inputs=inp, outputs=out)
-
-    return mount_gradio_app(
-        app=web_app,
-        blocks=interface,
-        path="/",
-    )
 
 @app.local_entrypoint()
-def run(
-    max_train_steps: int = 250,
+def train(
+    run_name: str = "",
+    max_train_steps: int = TrainConfig.max_train_steps,
+    checkpointing_steps: int = TrainConfig.checkpointing_steps,
+    rank: int = TrainConfig.rank,
+    learning_rate: float = TrainConfig.learning_rate,
+    push: bool = False,
 ):
-    print("🎨 loading model")
-    run_download.remote(MODEL_DIR, TrainConfig())
-    
-    print("🎨 setting up training")
-    config = TrainConfig(max_train_steps=max_train_steps)
-    
-    run_train.remote(MODEL_DIR, IMAGES_DIR, config)
-    print("🎨 training finished")
+    from penguinoh.cli import default_run_name
+
+    run_name = run_name or default_run_name()
+    config = TrainConfig(
+        max_train_steps=max_train_steps, checkpointing_steps=checkpointing_steps, rank=rank, learning_rate=learning_rate
+    )
+    print(f"Training run {run_name}: {config}")
+    train_remote.remote(run_name, config, push)
+    print(f"Finished {run_name}. Compare checkpoints with: modal run modal_app.py::generate --run {run_name}")
+
+
+@app.local_entrypoint()
+def generate(
+    lora: str = HUB_REPO,  # comma-separated: none, runs/<run>[/checkpoint-N], or owner/repo[/checkpoint-N]
+    run: str = "",  # shorthand for every checkpoint of a run in the runs volume
+    prompt: str = "",  # a single prompt instead of the prompts file
+    prompts_file: str = "prompts/eval.txt",
+    seeds: str = "1",
+    sampler: str = "base",
+    lora_scale: float = 1.0,
+    out: str = str(OUTPUT_DIR),
+):
+    from datetime import datetime
+
+    from PIL import Image
+
+    from penguinoh.generate import parse_lora, read_prompts, save_batch
+
+    if sampler not in SAMPLERS:
+        raise ValueError(f"sampler must be one of {list(SAMPLERS)}")
+    specs = run_loras(run) if run else lora.split(",")
+    prompts = [prompt] if prompt else read_prompts(Path(prompts_file))
+    seed_list = [int(s) for s in seeds.split(",")]
+
+    print(f"Rendering {len(prompts) * len(seed_list)} images for each of {len(specs)} LoRAs")
+    batches = Generator(sampler=sampler).generate.starmap([(spec, prompts, seed_list, lora_scale) for spec in specs])
+    results = {}
+    for spec, pngs in zip(specs, batches):
+        source = parse_lora(spec)
+        results[source.label if source else "no LoRA"] = [Image.open(io.BytesIO(png)) for png in pngs]
+    save_batch(results, prompts, seed_list, Path(out) / datetime.now().strftime("%Y%m%d-%H%M%S"))

@@ -1,210 +1,128 @@
 # Penguinoh Generator
 
-A personalized AI image generator for creating custom images of [Penguinoh the Stuffed Penguin](http://penguinoh.com) using DreamBooth fine-tuning and the FLUX.1-dev diffusion model.
+Generate new images of [Penguinoh the Stuffed Penguin](https://penguinoh.com) with a LoRA fine-tuned on
+[FLUX.2 [klein] 4B base](https://huggingface.co/black-forest-labs/FLUX.2-klein-base-4B) (Apache 2.0).
 
-## Overview
+The LoRA is trained with Hugging Face's DreamBooth script on 52 captioned photos from the penguinoh.com gallery,
+and published to [`eigenben/FLUX.2-klein-base-4B-penguinoh`](https://huggingface.co/eigenben/FLUX.2-klein-base-4B-penguinoh).
+Prompts refer to him as **`pngnh the Stuffed Penguin`**.
 
-This project uses DreamBooth to fine-tune the FLUX.1-dev text-to-image model on custom images of a stuffed penguin, enabling the generation of new, creative images featuring the character in various scenarios, styles, and settings.
-
-The project supports both local training and cloud deployment via [Modal](https://modal.com), providing a scalable infrastructure for GPU-accelerated training and inference.
-
-## Features
-
-- **DreamBooth Fine-tuning**: Train a LoRA adapter on custom images using Hugging Face's DreamBooth implementation
-- **FLUX.1-dev Model**: Uses Black Forest Labs' state-of-the-art diffusion model as the base
-- **Local Inference**: Generate images locally using pre-trained models from Hugging Face Hub
-- **Cloud Deployment**: Deploy training and inference on Modal with A100 GPUs
-- **Web Interface**: Interactive Gradio-based UI for generating images
-- **Training Monitoring**: Integration with Weights & Biases for experiment tracking
-- **FastAPI Backend**: REST API endpoints for programmatic access
-
-## Project Structure
+## Project layout
 
 ```
-.
-├── main.py              # Local training script (download & train)
-├── inference.py         # Local inference script using pre-trained model
-├── modal_app.py         # Modal deployment (cloud training & inference)
-├── pyproject.toml       # Project dependencies
-├── data/
-│   └── images/          # Training images of the subject
-├── dreambooth/          # Hugging Face DreamBooth training scripts
-├── model/               # Output directory for trained models
-└── output/              # Generated images from inference
+penguinoh/            Python package and `penguinoh` CLI
+  config.py           Trigger phrase, model ids, training defaults, sampler settings
+  dataset.py          `penguinoh prepare`: build data/train from website photos
+  train.py            `penguinoh train` / `upload`: run the DreamBooth script, push LoRA weights
+  generate.py         `penguinoh generate`: render prompts with one or more LoRAs, plus comparison grids
+dreambooth/           train_dreambooth_lora_flux2_klein.py, vendored from diffusers v0.41.0
+data/train/           Training images + metadata.jsonl (file_name, caption) — the dataset manifest
+prompts/eval.txt      Fixed prompts for comparing checkpoints
+modal_app.py          Train and generate on Modal GPUs
+modal_web.py          Password-protected Gradio UI on Modal
+runs/, output/        Local training runs and generated images (git-ignored)
 ```
 
-## Requirements
+## Setup
 
-- Python 3.12+
-- CUDA-compatible GPU (recommended: A100) for training
-- Hugging Face account and API token
-- Modal account (for cloud deployment)
-- Weights & Biases account (optional, for training monitoring)
+Requires Python 3.12+ and [uv](https://docs.astral.sh/uv/).
 
-## Installation
-
-1. Clone the repository:
-```bash
-git clone <repository-url>
-cd penguinoh_generator
-```
-
-2. Install dependencies using uv (or pip):
 ```bash
 uv sync
 ```
 
-3. Set up your API keys:
-   - Create a `.env` file or export environment variables:
-   ```bash
-   export HF_TOKEN=<your-huggingface-token>
-   export WANDB_API_KEY=<your-wandb-key>  # Optional
-   ```
+Accounts used: Hugging Face (`HF_TOKEN`, to download models and push the LoRA), Modal (GPUs), and
+Weights & Biases (`WANDB_API_KEY`, optional training logs and validation images).
 
-## Usage
+## Dataset
 
-### Local Training
+`data/train/metadata.jsonl` lists each training image and its caption. Captions start with
+`a photo of pngnh the Stuffed Penguin` and describe the pose, setting and framing — never his appearance,
+so that look is learned by the trigger phrase. To add or replace photos, edit the manifest with the website
+file name (any extension) and a caption, then rebuild from a checkout of the website repo next to this one:
 
-0. **Ensure uv dependencies are installed:**
-```
-uv sync
-```
-
-1. **Download the base model**:
 ```bash
-uv run main.py download
+uv run penguinoh prepare            # copies, EXIF-rotates, strips metadata, resizes to 1600px
+uv run penguinoh prepare --prune    # also delete images no longer in the manifest
 ```
 
-2. **Train the model**:
+## Training on Modal
+
+One-time Modal secrets:
+
 ```bash
-uv run main.py train
+modal secret create huggingface-secret HF_TOKEN=<token>
+modal secret create wandb-secret WANDB_API_KEY=<key>
 ```
 
-3. **Download and train in one step**:
+Train on an L40S (expect roughly an hour for the default 2,000 steps). `--detach` keeps it running if your laptop sleeps.
+Runs are saved to the `penguinoh-generator-runs` volume with a checkpoint every 250 steps.
+
 ```bash
-uv run main.py
+uv run modal run --detach modal_app.py::train
+uv run modal run --detach modal_app.py::train --max-train-steps 3000 --rank 16 --run-name my-run --push
 ```
 
-### Local Inference
+Compare every checkpoint of a run on `prompts/eval.txt`; images and a `grid.jpg` land in `output/<timestamp>/`:
 
-Run inference using the pre-trained model from Hugging Face Hub:
-
-1. **Ensure the output directory exists**:
 ```bash
-mkdir -p output
+uv run modal run modal_app.py::generate --run klein4b-20261014-1200 --seeds 1,2
 ```
 
-2. **Run the inference script**:
+Once you've picked a checkpoint, publish it (the final weights plus every checkpoint's LoRA weights) by training
+with `--push`, or download the run and use `penguinoh upload runs/<run-name>`.
+
+## Generating
+
+On Modal (no local GPU needed):
+
 ```bash
-uv run inference.py
+uv run modal run modal_app.py::generate --prompt "surfing a big wave in Hawaii" --seeds 1,2,3
+uv run modal run modal_app.py::generate --lora none,eigenben/FLUX.2-klein-base-4B-penguinoh   # with vs without LoRA
+uv run modal run modal_app.py::generate --sampler distilled                                  # 4-step klein-4B
 ```
 
-This will:
-- Load the FLUX.1-dev base model with bfloat16 precision
-- Load the fine-tuned LoRA weights from `eigenben/FLUX.1-dev-penguinoh-generator`
-- Generate 10 example images with various prompts (Paris, San Francisco, pastel drawing, etc.)
-- Save timestamped images to the `output/` directory
+Locally (CUDA, or Apple Silicon via MPS — slow):
 
-You can modify `inference.py` to customize the prompts and generate your own images.
-
-### Cloud Training with Modal
-
-1. **Set up Modal secrets**:
 ```bash
-modal secret create huggingface-secret HF_TOKEN=<your-token>
-modal secret create wandb-secret WANDB_API_KEY=<your-key>  # Optional
+uv run penguinoh generate --prompt "surfing a big wave in Hawaii" --seeds 1 2 3
+uv run penguinoh generate --lora eigenben/FLUX.2-klein-base-4B-penguinoh/checkpoint-1500
 ```
 
-2. **Upload training images to Modal volume**:
-```bash
-# Upload your images to the Modal volume at /workspace/data/images
-```
+A prompt that doesn't mention `pngnh the Stuffed Penguin` is treated as a scene and becomes
+`a photo of pngnh the Stuffed Penguin <scene>`. Name him explicitly for other media, e.g.
+`a watercolor painting of pngnh the Stuffed Penguin in Venice`.
 
-3. **Run training on Modal**:
-```bash
-uv run modal run modal_app.py --max-train-steps 250
-```
+Samplers: `base` (FLUX.2 klein base 4B, 50 steps, guidance 4.0, the model the LoRA was trained on) and
+`distilled` (FLUX.2 klein 4B, 4 steps, guidance 1.0 — much faster, likeness may be weaker).
 
-4. **Deploy the web interface**:
+## Web UI
+
 ```bash
 uv run modal deploy modal_app.py
+modal secret create penguinoh-web-auth PENGUINOH_WEB_USER=<user> PENGUINOH_WEB_PASSWORD=<password>
+uv run modal serve modal_web.py     # temporary URL while running; `modal deploy modal_web.py` to keep it up
 ```
 
-This will create a public URL for the Gradio interface where you can generate images.
+## Training on another GPU host
 
-## Run on a remote GPU host
-- Ensure rsync is installed: `apt update && apt install rsync -y`
-- Install uv: `curl -LsSf https://astral.sh/uv/install.sh | sh`
-- Sync project to remote host: `bin/rspec 1.1.1.1:22 /workspace` (`/workspace` is implied/default)
-- Ensure HF_TOKEN and other env vars are set in `.env` on remote host
-- SSH into remote host and run: `cd /workspace && uv sync && uv run --env-file .env python main.py`
-
-## Docker (GPU)
-- Build: `docker build -t penguinoh-generator:latest .`
-- Ensure HF_TOKEN and other env vars are set in `.env` on remote host
-- Run (NVIDIA): `docker run --rm --gpus all --env-file .env -v "$PWD/model:/app/model" penguinoh-generator:latest`
-
-## Configuration
-
-Training parameters can be configured in `main.py`:
-
-```python
-@dataclass
-class TrainConfig(SharedConfig):
-    instance_name: str = "pngnh"           # Instance identifier
-    class_name: str = "Stuffed Penguin"    # Class description
-    model_name: str = "black-forest-labs/FLUX.1-dev"
-    resolution: int = 512                   # Training resolution
-    train_batch_size: int = 3              # Batch size
-    rank: int = 16                         # LoRA rank
-    learning_rate: float = 4e-4
-    max_train_steps: int = 500             # Training iterations
-    seed: int = 117                        # Random seed
+```bash
+uv sync
+uv run --env-file .env penguinoh train --push        # .env holds HF_TOKEN and WANDB_API_KEY
 ```
 
-Inference parameters are in `modal_app.py`:
+Or with Docker (NVIDIA):
 
-```python
-@dataclass
-class AppConfig(SharedConfig):
-    num_inference_steps: int = 50          # Quality vs speed tradeoff
-    guidance_scale: float = 6              # Prompt adherence strength
+```bash
+docker build -t penguinoh-generator .
+docker run --rm --gpus all --env-file .env -v "$PWD/runs:/app/runs" penguinoh-generator
 ```
 
-## How It Works
-
-1. **Download**: Fetches the FLUX.1-dev base model from Hugging Face
-2. **Training**: Uses DreamBooth with LoRA to fine-tune the model on custom images
-   - Creates a unique instance phrase: "pngnh the Stuffed Penguin"
-   - Trains the model to recognize and generate this specific character
-   - Saves LoRA weights for efficient storage and loading
-3. **Inference**: Loads the base model + LoRA weights to generate new images
-4. **Web Interface**: Provides an easy-to-use Gradio UI for image generation
-
-## Training Details
-
-- **Method**: DreamBooth with LoRA (Low-Rank Adaptation)
-- **Base Model**: FLUX.1-dev (from Black Forest Labs)
-- **Precision**: BFloat16 (when CUDA available)
-- **Optimizer**: AdamW with configurable learning rate
-- **Scheduler**: Constant learning rate (configurable)
-- **GPU**: A100-80GB recommended for training
-
-## Web Interface
-
-The deployed Gradio interface allows users to:
-- Enter text prompts describing the desired image
-- Generate 512x512 images featuring Penguinoh
-- Experiment with different artistic styles and scenarios
-
-Example prompts:
-- "pngnh the Stuffed Penguin in space"
-- "pngnh the Stuffed Penguin painted by Van Gogh"
-- "pngnh the Stuffed Penguin as a superhero"
+Every training default in `penguinoh/config.py` can be overridden on the command line; see
+`uv run penguinoh train --help`.
 
 ## Credits
 
-- Built with [Hugging Face Diffusers](https://github.com/huggingface/diffusers)
-- Deployed on [Modal](https://modal.com)
-- UI powered by [Gradio](https://gradio.app)
-- Base model: [FLUX.1-dev](https://huggingface.co/black-forest-labs/FLUX.1-dev)
+- [FLUX.2 [klein]](https://huggingface.co/black-forest-labs/FLUX.2-klein-base-4B) by Black Forest Labs
+- [Hugging Face Diffusers](https://github.com/huggingface/diffusers) DreamBooth LoRA training
+- [Modal](https://modal.com) for GPUs, [Gradio](https://gradio.app) for the UI
