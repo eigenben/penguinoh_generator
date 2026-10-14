@@ -131,7 +131,8 @@ def generate(
     seed_list = [int(s) for s in seeds.split(",")]
 
     print(f"Rendering {len(prompts) * len(seed_list)} images for each of {len(specs)} LoRAs")
-    batches = Generator(sampler=sampler).generate.starmap([(spec, prompts, seed_list, lora_scale) for spec in specs])
+    generator = Generator(sampler=sampler)
+    batches = list(generator.generate.starmap([(spec, prompts, seed_list, lora_scale) for spec in specs]))
     results = {}
     for spec, pngs in zip(specs, batches):
         source = parse_lora(spec)
