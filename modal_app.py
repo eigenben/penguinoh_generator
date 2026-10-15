@@ -2,9 +2,9 @@
 
     modal run --detach modal_app.py::train                  # train (and optionally --push) into the runs volume
     modal run modal_app.py::generate --run <run-name>       # compare every checkpoint of a run on prompts/eval.txt
-    modal run modal_app.py::upload --run <run-name>         # publish a run's LoRA weights and docs/MODEL_CARD.md
+    modal run modal_app.py::upload --run <run-name> --root-checkpoint checkpoint-N   # publish to the Hub
     modal run modal_app.py::generate --prompt "surfing in Hawaii" --seeds 1,2,3
-    modal deploy modal_app.py                               # deploy Generator for modal_web.py (and later penguinoh.com)
+    modal deploy modal_app.py                               # deploy Generator for other apps to call
 """
 
 import io
@@ -53,11 +53,11 @@ def train_remote(run_name: str, config: TrainConfig, push: bool):
 
 
 @app.function(image=image, volumes=volumes, secrets=[huggingface_secret], timeout=30 * 60)
-def upload_remote(run_name: str, repo_id: str):
+def upload_remote(run_name: str, repo_id: str, root_checkpoint: str | None):
     from penguinoh.config import RUNS_DIR
     from penguinoh.train import upload
 
-    upload(RUNS_DIR / run_name, repo_id)
+    upload(RUNS_DIR / run_name, repo_id, root_checkpoint)
 
 
 @app.cls(image=image, gpu=GPU, volumes=volumes, secrets=[huggingface_secret], scaledown_window=300, timeout=60 * 60,
@@ -151,5 +151,5 @@ def generate(
 
 
 @app.local_entrypoint()
-def upload(run: str, hub_repo: str = HUB_REPO):
-    upload_remote.remote(run, hub_repo)
+def upload(run: str, root_checkpoint: str = "", hub_repo: str = HUB_REPO):
+    upload_remote.remote(run, hub_repo, root_checkpoint or None)
