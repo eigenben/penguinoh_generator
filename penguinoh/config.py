@@ -20,10 +20,9 @@ BASE_MODEL = "black-forest-labs/FLUX.2-klein-base-4B"
 DISTILLED_MODEL = "black-forest-labs/FLUX.2-klein-4B"
 HUB_REPO = "eigenben/FLUX.2-klein-base-4B-penguinoh"
 LORA_WEIGHT_NAME = "pytorch_lora_weights.safetensors"
-# Chosen from the klein4b-r32-2000 checkpoint comparison: best likeness while compositions still vary.
-DEFAULT_LORA = f"{HUB_REPO}/checkpoint-1750"
-
-WANDB_ENTITY = "eigenben-rubidiom"
+# The Hub repo root holds checkpoint-1750 of klein4b-r32-2000, chosen from a comparison of every
+# checkpoint for the best likeness while compositions still vary. Each checkpoint is also in its own folder.
+DEFAULT_LORA = HUB_REPO
 
 
 @dataclass

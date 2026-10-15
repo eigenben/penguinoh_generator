@@ -43,7 +43,7 @@ def cmd_train(args):
 def cmd_upload(args):
     from penguinoh.train import upload
 
-    upload(Path(args.run_dir), args.hub_repo)
+    upload(Path(args.run_dir), args.hub_repo, args.root_checkpoint)
 
 
 def cmd_generate(args):
@@ -86,6 +86,7 @@ def main():
 
     p = sub.add_parser("upload", help="Upload a finished run's LoRA weights to the Hub")
     p.add_argument("run_dir")
+    p.add_argument("--root-checkpoint", help="Checkpoint (e.g. checkpoint-1750) to publish as the repo-root weights")
     p.add_argument("--hub-repo", default=HUB_REPO)
     p.set_defaults(func=cmd_upload)
 

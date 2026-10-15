@@ -1,7 +1,7 @@
 ---
 base_model: black-forest-labs/FLUX.2-klein-base-4B
 library_name: diffusers
-license: other
+license: cc-by-nc-4.0
 instance_prompt: a photo of pngnh the Stuffed Penguin
 tags:
 - text-to-image
@@ -42,22 +42,21 @@ that generates [Penguinoh](https://penguinoh.com), a well-traveled stuffed pengu
 Refer to him as **`pngnh the Stuffed Penguin`**, e.g. `a photo of pngnh the Stuffed Penguin surfing in Hawaii`
 or `a watercolor painting of pngnh the Stuffed Penguin in Venice`.
 
-## Which weights to use
+## Weights
 
-**Use `checkpoint-1750/pytorch_lora_weights.safetensors`** — it had the best likeness while keeping varied
-compositions in our checkpoint comparison. The weights at the repo root are the final step (2000), and every
-250-step checkpoint is included for comparison. Likeness is unreliable before step 1250.
+The repo-root `pytorch_lora_weights.safetensors` is **step 1750**, which had the best likeness while keeping varied
+compositions in a comparison of every checkpoint. Each 250-step checkpoint, including the final step 2000, is also
+in its own `checkpoint-N/` folder; likeness is unreliable before step 1250.
+
+You can try it from this page's inference widget (billed to your Hugging Face account through an inference
+provider), or run it yourself with diffusers:
 
 ```python
 import torch
 from diffusers import Flux2KleinPipeline
 
 pipe = Flux2KleinPipeline.from_pretrained("black-forest-labs/FLUX.2-klein-base-4B", torch_dtype=torch.bfloat16).to("cuda")
-pipe.load_lora_weights(
-    "eigenben/FLUX.2-klein-base-4B-penguinoh",
-    subfolder="checkpoint-1750",
-    weight_name="pytorch_lora_weights.safetensors",
-)
+pipe.load_lora_weights("eigenben/FLUX.2-klein-base-4B-penguinoh", weight_name="pytorch_lora_weights.safetensors")
 image = pipe(
     "a photo of pngnh the Stuffed Penguin sitting on a park bench in Central Park in autumn",
     num_inference_steps=50,
@@ -79,3 +78,9 @@ image = pipe(
 - Illustration styles such as children's-book art drift toward a generic cartoon penguin.
 - The trigger word can leak into rendered text (e.g. "PNGNH" on a poster), mostly in earlier checkpoints.
 - Later checkpoints repeat compositions more for the same prompt; vary seeds for diversity.
+
+## License
+
+The LoRA weights and sample images are © Ben Hughes, licensed under
+[CC BY-NC 4.0](https://creativecommons.org/licenses/by-nc/4.0/). The base model is licensed separately by
+Black Forest Labs (Apache 2.0); the training code is Apache 2.0.
