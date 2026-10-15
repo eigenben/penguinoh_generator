@@ -5,7 +5,7 @@ import dataclasses
 from datetime import datetime
 from pathlib import Path
 
-from penguinoh.config import HUB_REPO, OUTPUT_DIR, REPO_ROOT, RUNS_DIR, SAMPLERS, TRAIN_DIR, TrainConfig
+from penguinoh.config import DEFAULT_LORA, HUB_REPO, OUTPUT_DIR, REPO_ROOT, RUNS_DIR, SAMPLERS, TRAIN_DIR, TrainConfig
 
 DEFAULT_PROMPTS = REPO_ROOT / "prompts" / "eval.txt"
 
@@ -105,7 +105,7 @@ def main():
 
     args = parser.parse_args()
     if args.func is cmd_generate and not args.lora:
-        args.lora = [HUB_REPO]
+        args.lora = [DEFAULT_LORA]
     args.func(args)
 
 

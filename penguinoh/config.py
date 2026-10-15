@@ -8,6 +8,8 @@ TRAIN_DIR = REPO_ROOT / "data" / "train"
 RUNS_DIR = REPO_ROOT / "runs"
 OUTPUT_DIR = REPO_ROOT / "output"
 TRAIN_SCRIPT = REPO_ROOT / "dreambooth" / "train_dreambooth_lora_flux2_klein.py"
+MODEL_CARD = REPO_ROOT / "docs" / "MODEL_CARD.md"
+SAMPLES_DIR = REPO_ROOT / "docs" / "samples"
 
 INSTANCE_NAME = "pngnh"
 CLASS_NAME = "Stuffed Penguin"
@@ -18,6 +20,8 @@ BASE_MODEL = "black-forest-labs/FLUX.2-klein-base-4B"
 DISTILLED_MODEL = "black-forest-labs/FLUX.2-klein-4B"
 HUB_REPO = "eigenben/FLUX.2-klein-base-4B-penguinoh"
 LORA_WEIGHT_NAME = "pytorch_lora_weights.safetensors"
+# Chosen from the klein4b-r32-2000 checkpoint comparison: best likeness while compositions still vary.
+DEFAULT_LORA = f"{HUB_REPO}/checkpoint-1750"
 
 WANDB_ENTITY = "eigenben-rubidiom"
 
