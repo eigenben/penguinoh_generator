@@ -5,6 +5,8 @@ Generate new images of [Penguinoh the Stuffed Penguin](https://penguinoh.com) wi
 
 The LoRA is trained with Hugging Face's DreamBooth script on 52 captioned photos from the penguinoh.com gallery,
 and published to [`eigenben/FLUX.2-klein-base-4B-penguinoh`](https://huggingface.co/eigenben/FLUX.2-klein-base-4B-penguinoh).
+The default LoRA everywhere is that repo's **`checkpoint-1750`** (`DEFAULT_LORA` in `penguinoh/config.py`), picked
+from a comparison of every 250-step checkpoint of the `klein4b-r32-2000` run.
 Prompts refer to him as **`pngnh the Stuffed Penguin`**.
 
 ## Project layout
@@ -16,6 +18,7 @@ penguinoh/            Python package and `penguinoh` CLI
   train.py            `penguinoh train` / `upload`: run the DreamBooth script, push LoRA weights
   generate.py         `penguinoh generate`: render prompts with one or more LoRAs, plus comparison grids
 dreambooth/           train_dreambooth_lora_flux2_klein.py, vendored from diffusers v0.41.0
+docs/                 Hugging Face model card and sample images
 data/train/           Training images + metadata.jsonl (file_name, caption) — the dataset manifest
 prompts/eval.txt      Fixed prompts for comparing checkpoints
 modal_app.py          Train and generate on Modal GPUs
@@ -69,8 +72,12 @@ Compare every checkpoint of a run on `prompts/eval.txt`; images and a `grid.jpg`
 uv run modal run modal_app.py::generate --run klein4b-20261014-1200 --seeds 1,2
 ```
 
-Once you've picked a checkpoint, publish it (the final weights plus every checkpoint's LoRA weights) by training
-with `--push`, or download the run and use `penguinoh upload runs/<run-name>`.
+Once you've picked a checkpoint, publish the run — the final weights, every checkpoint's LoRA weights (no optimizer
+state), `docs/MODEL_CARD.md` as the README, and `docs/samples/` — then point `DEFAULT_LORA` at the chosen checkpoint:
+
+```bash
+uv run modal run modal_app.py::upload --run klein4b-r32-2000
+```
 
 ## Generating
 
@@ -78,7 +85,7 @@ On Modal (no local GPU needed):
 
 ```bash
 uv run modal run modal_app.py::generate --prompt "surfing a big wave in Hawaii" --seeds 1,2,3
-uv run modal run modal_app.py::generate --lora none,eigenben/FLUX.2-klein-base-4B-penguinoh   # with vs without LoRA
+uv run modal run modal_app.py::generate --lora none,eigenben/FLUX.2-klein-base-4B-penguinoh/checkpoint-1750   # with vs without
 uv run modal run modal_app.py::generate --sampler distilled                                  # 4-step klein-4B
 ```
 
@@ -86,7 +93,7 @@ Locally (CUDA, or Apple Silicon via MPS — slow):
 
 ```bash
 uv run penguinoh generate --prompt "surfing a big wave in Hawaii" --seeds 1 2 3
-uv run penguinoh generate --lora eigenben/FLUX.2-klein-base-4B-penguinoh/checkpoint-1500
+uv run penguinoh generate --lora eigenben/FLUX.2-klein-base-4B-penguinoh/checkpoint-1500   # a different checkpoint
 ```
 
 A prompt that doesn't mention `pngnh the Stuffed Penguin` is treated as a scene and becomes

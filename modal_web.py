@@ -23,13 +23,13 @@ def web():
     from fastapi import FastAPI
     from PIL import Image
 
-    from penguinoh.config import HUB_REPO, TRIGGER
+    from penguinoh.config import DEFAULT_LORA, TRIGGER
 
     generator = modal.Cls.from_name("penguinoh-generator", "Generator")()
 
     def go(scene: str, seed: float):
         scene = scene.strip() or "waddling through a snowy forest at dusk"
-        png = generator.generate.remote(HUB_REPO, [scene], [int(seed)])[0]
+        png = generator.generate.remote(DEFAULT_LORA, [scene], [int(seed)])[0]
         return Image.open(io.BytesIO(png))
 
     with gr.Blocks(title="Penguinoh generator") as ui:

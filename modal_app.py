@@ -2,6 +2,7 @@
 
     modal run --detach modal_app.py::train                  # train (and optionally --push) into the runs volume
     modal run modal_app.py::generate --run <run-name>       # compare every checkpoint of a run on prompts/eval.txt
+    modal run modal_app.py::upload --run <run-name>         # publish a run's LoRA weights and docs/MODEL_CARD.md
     modal run modal_app.py::generate --prompt "surfing in Hawaii" --seeds 1,2,3
     modal deploy modal_app.py                               # deploy Generator for modal_web.py (and later penguinoh.com)
 """
@@ -11,7 +12,7 @@ from pathlib import Path
 
 import modal
 
-from penguinoh.config import HUB_REPO, LORA_WEIGHT_NAME, OUTPUT_DIR, SAMPLERS, TrainConfig
+from penguinoh.config import DEFAULT_LORA, HUB_REPO, LORA_WEIGHT_NAME, OUTPUT_DIR, SAMPLERS, TrainConfig
 
 REMOTE_ROOT = Path("/root")  # where Modal puts local Python source, so penguinoh.config.REPO_ROOT resolves here
 HF_CACHE = "/cache/huggingface"
@@ -25,6 +26,7 @@ image = (
     .env({"HF_HOME": HF_CACHE, "HF_XET_HIGH_PERFORMANCE": "1"})
     .add_local_dir("dreambooth", str(REMOTE_ROOT / "dreambooth"))
     .add_local_dir("data/train", str(REMOTE_ROOT / "data" / "train"))
+    .add_local_dir("docs", str(REMOTE_ROOT / "docs"))
     .add_local_python_source("penguinoh")
 )
 
@@ -48,6 +50,14 @@ def train_remote(run_name: str, config: TrainConfig, push: bool):
         runs_volume.commit()  # keep whatever checkpoints exist even if training fails
     if push:
         upload(output_dir)
+
+
+@app.function(image=image, volumes=volumes, secrets=[huggingface_secret], timeout=30 * 60)
+def upload_remote(run_name: str, repo_id: str):
+    from penguinoh.config import RUNS_DIR
+    from penguinoh.train import upload
+
+    upload(RUNS_DIR / run_name, repo_id)
 
 
 @app.cls(image=image, gpu=GPU, volumes=volumes, secrets=[huggingface_secret], scaledown_window=300, timeout=60 * 60,
@@ -109,7 +119,7 @@ def train(
 
 @app.local_entrypoint()
 def generate(
-    lora: str = HUB_REPO,  # comma-separated: none, runs/<run>[/checkpoint-N], or owner/repo[/checkpoint-N]
+    lora: str = DEFAULT_LORA,  # comma-separated: none, runs/<run>[/checkpoint-N], or owner/repo[/checkpoint-N]
     run: str = "",  # shorthand for every checkpoint of a run in the runs volume
     prompt: str = "",  # a single prompt instead of the prompts file
     prompts_file: str = "prompts/eval.txt",
@@ -138,3 +148,8 @@ def generate(
         source = parse_lora(spec)
         results[source.label if source else "no LoRA"] = [Image.open(io.BytesIO(png)) for png in pngs]
     save_batch(results, prompts, seed_list, Path(out) / datetime.now().strftime("%Y%m%d-%H%M%S"))
+
+
+@app.local_entrypoint()
+def upload(run: str, hub_repo: str = HUB_REPO):
+    upload_remote.remote(run, hub_repo)

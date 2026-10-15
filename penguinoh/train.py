@@ -9,6 +9,8 @@ from penguinoh.config import (
     HUB_REPO,
     INSTANCE_PROMPT,
     LORA_WEIGHT_NAME,
+    MODEL_CARD,
+    SAMPLES_DIR,
     TRAIN_DIR,
     TRAIN_SCRIPT,
     WANDB_ENTITY,
@@ -70,14 +72,15 @@ def train(config: TrainConfig, output_dir: Path, train_dir: Path = TRAIN_DIR):
 
 
 def upload(output_dir: Path, repo_id: str = HUB_REPO):
-    """Push the final LoRA, its model card, and each checkpoint's LoRA weights (not optimizer state)."""
-    from huggingface_hub import create_repo, upload_folder
+    """Push the final LoRA and each checkpoint's LoRA weights (not optimizer state), plus our model card."""
+    from huggingface_hub import CommitOperationAdd, create_commit, create_repo
+
+    weights = [output_dir / LORA_WEIGHT_NAME, *sorted(output_dir.glob(f"checkpoint-*/{LORA_WEIGHT_NAME}"))]
+    operations = [CommitOperationAdd(str(path.relative_to(output_dir)), path) for path in weights if path.exists()]
+    if MODEL_CARD.exists():
+        operations.append(CommitOperationAdd("README.md", MODEL_CARD))
+        operations += [CommitOperationAdd(f"samples/{p.name}", p) for p in sorted(SAMPLES_DIR.glob("*.jpg"))]
 
     create_repo(repo_id, exist_ok=True)
-    upload_folder(
-        repo_id=repo_id,
-        folder_path=output_dir,
-        allow_patterns=[LORA_WEIGHT_NAME, "README.md", "*.png", f"checkpoint-*/{LORA_WEIGHT_NAME}"],
-        commit_message=f"Upload {output_dir.name}",
-    )
-    print(f"Uploaded {output_dir} to https://huggingface.co/{repo_id}")
+    create_commit(repo_id, operations, commit_message=f"Upload {output_dir.name}")
+    print(f"Uploaded {len(operations)} files from {output_dir} to https://huggingface.co/{repo_id}")
